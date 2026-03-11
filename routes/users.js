@@ -4,6 +4,7 @@ const userModel = require("../schemas/user");
 const { body, param, validationResult } = require("express-validator");
 const bcrypt = require("bcrypt");
 const authMiddleware = require("../utils/authMiddleware");
+const { isAdmin, isOwnerOrAdmin } = require("../utils/roleMiddleware");
 const UserController = require("../controllers/userController");
 
 // Common middleware to handle validation results
@@ -61,8 +62,8 @@ router.put(
 
 /* --- Admin/Management Routes --- */
 
-/* GET users listing. */
-router.get("/", async function (req, res, next) {
+/* GET users listing. (Admin Only) */
+router.get("/", isAdmin, async function (req, res, next) {
   try {
     let users = await userModel.find({ isDeleted: false }).populate({
       path: "role",
@@ -80,10 +81,14 @@ router.get("/", async function (req, res, next) {
   }
 });
 
-// GET user by ID
+// GET user by ID (Owner or Admin)
 router.get(
   "/:id",
-  [param("id").isMongoId().withMessage("ID không hợp lệ"), validate],
+  [
+    param("id").isMongoId().withMessage("ID không hợp lệ"),
+    validate,
+    isOwnerOrAdmin
+  ],
   async function (req, res, next) {
     try {
       let user = await userModel.findById(req.params.id).populate({
@@ -102,10 +107,14 @@ router.get(
   },
 );
 
-// Soft delete user
+// Soft delete user (Admin Only)
 router.delete(
   "/:id",
-  [param("id").isMongoId().withMessage("ID không hợp lệ"), validate],
+  [
+    param("id").isMongoId().withMessage("ID không hợp lệ"), 
+    validate,
+    isAdmin
+  ],
   async function (req, res, next) {
     try {
       let user = await userModel.findById(req.params.id);
