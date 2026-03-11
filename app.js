@@ -21,13 +21,14 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Routes
 app.use("/", indexRouter);
-//localhost:3000/users
-app.use("/auth", require("./routes/auth"));
-app.use("/api/v1/users", require("./routes/users"));
-app.use("/api/v1/products", require("./routes/products"));
-app.use("/api/v1/categories", require("./routes/categories"));
-app.use("/api/v1/roles", require("./routes/roles"));
+app.use("/auth", require("./routes/auth")); // Public routes (register, login, refresh)
+
+// Protected API routes
+const authMiddleware = require("./utils/authMiddleware");
+app.use("/api/v1/users", authMiddleware, require("./routes/users"));
+app.use("/api/v1/roles", authMiddleware, require("./routes/roles"));
 
 mongoose.connect(process.env.MONGODB_URI);
 mongoose.connection.on("connected", function () {

@@ -20,13 +20,12 @@ const validate = (req, res, next) => {
 /* --- Profile Routes (Authenticated) --- */
 
 // Xem profile bản thân
-router.get("/me", authMiddleware, UserController.getProfile);
+router.get("/me", UserController.getProfile);
 
 // Cập nhật profile bản thân
 router.put(
   "/me",
   [
-    authMiddleware,
     body("username")
       .optional()
       .isLength({ min: 3 })
@@ -43,7 +42,6 @@ router.put(
 router.put(
   "/me/change-password",
   [
-    authMiddleware,
     body("oldPassword").notEmpty().withMessage("Mật khẩu cũ không được để trống"),
     body("newPassword")
       .isStrongPassword({
