@@ -32,6 +32,9 @@ app.use("/api/v1/roles", require("./routes/roles"));
 mongoose.connect(process.env.MONGODB_URI);
 mongoose.connection.on("connected", function () {
   console.log("connected");
+  // Chạy seed dữ liệu khi kết nối thành công
+  const seedData = require("./utils/seed");
+  seedData();
 });
 mongoose.connection.on("disconnected", function () {
   console.log("disconnected");
