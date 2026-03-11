@@ -29,8 +29,6 @@ app.use("/auth", require("./routes/auth")); // Public routes (register, login, r
 const authMiddleware = require("./utils/authMiddleware");
 app.use("/api/v1/users", authMiddleware, require("./routes/users"));
 app.use("/api/v1/roles", authMiddleware, require("./routes/roles"));
-app.use("/api/v1/products", authMiddleware, require("./routes/products"));
-app.use("/api/v1/categories", authMiddleware, require("./routes/categories"));
 
 mongoose.connect(process.env.MONGODB_URI);
 mongoose.connection.on("connected", function () {
