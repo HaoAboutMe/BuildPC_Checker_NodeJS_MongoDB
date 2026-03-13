@@ -77,3 +77,7 @@ dist
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Uploads
+public/uploads/*
+!public/uploads/.gitkeep
