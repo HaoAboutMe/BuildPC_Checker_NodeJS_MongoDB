@@ -20,10 +20,48 @@ const validate = (req, res, next) => {
 
 /* --- Profile Routes (Authenticated) --- */
 
-// Xem profile bản thân
+/**
+ * @swagger
+ * tags:
+ *   name: User
+ *   description: User profile and management
+ */
+
+/**
+ * @swagger
+ * /api/v1/users/me:
+ *   get:
+ *     summary: Get current user profile
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 router.get("/me", UserController.getProfile);
 
-// Cập nhật profile bản thân
+/**
+ * @swagger
+ * /api/v1/users/me:
+ *   put:
+ *     summary: Update current user profile
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstname: { type: string, example: "Hao" }
+ *               lastname: { type: string, example: "Nguyen" }
+ *               dateOfBirth: { type: string, format: date, example: "1995-01-01" }
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ */
 router.put(
   "/me",
   [
@@ -31,19 +69,50 @@ router.put(
       .optional()
       .isLength({ min: 3 })
       .withMessage("username phải ít nhất 3 ký tự"),
-    body("firstname").optional().notEmpty().withMessage("firstname không được để trống"),
-    body("lastname").optional().notEmpty().withMessage("lastname không được để trống"),
-    body("dateOfBirth").optional().isISO8601().withMessage("Ngày sinh không hợp lệ"),
+    body("firstname")
+      .optional()
+      .notEmpty()
+      .withMessage("firstname không được để trống"),
+    body("lastname")
+      .optional()
+      .notEmpty()
+      .withMessage("lastname không được để trống"),
+    body("dateOfBirth")
+      .optional()
+      .isISO8601()
+      .withMessage("Ngày sinh không hợp lệ"),
     validate,
   ],
   UserController.updateProfile,
 );
 
-// Đổi mật khẩu
+/**
+ * @swagger
+ * /api/v1/users/me/change-password:
+ *   put:
+ *     summary: Change password
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               oldPassword: { type: string, example: "Password123!" }
+ *               newPassword: { type: string, example: "NewPassword123!" }
+ *     responses:
+ *       200:
+ *         description: Password changed
+ */
 router.put(
   "/me/change-password",
   [
-    body("oldPassword").notEmpty().withMessage("Mật khẩu cũ không được để trống"),
+    body("oldPassword")
+      .notEmpty()
+      .withMessage("Mật khẩu cũ không được để trống"),
     body("newPassword")
       .isStrongPassword({
         minLength: 8,
@@ -62,7 +131,18 @@ router.put(
 
 /* --- Admin/Management Routes --- */
 
-/* GET users listing. (Admin Only) */
+/**
+ * @swagger
+ * /api/v1/users:
+ *   get:
+ *     summary: List all users (Admin only)
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 router.get("/", isAdmin, async function (req, res, next) {
   try {
     let users = await userModel.find({ isDeleted: false }).populate({
@@ -81,13 +161,30 @@ router.get("/", isAdmin, async function (req, res, next) {
   }
 });
 
-// GET user by ID (Owner or Admin)
+/**
+ * @swagger
+ * /api/v1/users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 router.get(
   "/:id",
   [
     param("id").isMongoId().withMessage("ID không hợp lệ"),
     validate,
-    isOwnerOrAdmin
+    isOwnerOrAdmin,
   ],
   async function (req, res, next) {
     try {
@@ -107,14 +204,27 @@ router.get(
   },
 );
 
-// Soft delete user (Admin Only)
+/**
+ * @swagger
+ * /api/v1/users/{id}:
+ *   delete:
+ *     summary: Soft delete user (Admin only)
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User deleted
+ */
 router.delete(
   "/:id",
-  [
-    param("id").isMongoId().withMessage("ID không hợp lệ"), 
-    validate,
-    isAdmin
-  ],
+  [param("id").isMongoId().withMessage("ID không hợp lệ"), validate, isAdmin],
   async function (req, res, next) {
     try {
       let user = await userModel.findById(req.params.id);
