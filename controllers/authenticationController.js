@@ -1,4 +1,5 @@
 const userModel = require("../schemas/user");
+const roleModel = require("../schemas/role");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
@@ -43,26 +44,44 @@ const AuthenticationController = {
       const { identifier, password } = req.body;
 
       if (!identifier || !password) {
-        return res.status(400).json({ success: false, message: "Vui lòng nhập đầy đủ thông tin" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Vui lòng nhập đầy đủ thông tin" });
       }
 
-      const user = await userModel.findOne({
-        $or: [{ email: identifier }, { username: identifier }]
-      })
-      .populate("role")
-      .select("+password");
+      const user = await userModel
+        .findOne({
+          $or: [{ email: identifier }, { username: identifier }],
+        })
+        .populate("role")
+        .select("+password");
 
       if (!user) {
-        return res.status(401).json({ success: false, message: "Thông tin đăng nhập không chính xác" });
+        return res
+          .status(401)
+          .json({
+            success: false,
+            message: "Thông tin đăng nhập không chính xác",
+          });
       }
 
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
-        return res.status(401).json({ success: false, message: "Thông tin đăng nhập không chính xác" });
+        return res
+          .status(401)
+          .json({
+            success: false,
+            message: "Thông tin đăng nhập không chính xác",
+          });
       }
 
       if (!user.isVerified) {
-        return res.status(403).json({ success: false, message: "Vui lòng xác thực email trước khi đăng nhập" });
+        return res
+          .status(403)
+          .json({
+            success: false,
+            message: "Vui lòng xác thực email trước khi đăng nhập",
+          });
       }
 
       // Tạo Access Token và Refresh Token
@@ -77,7 +96,7 @@ const AuthenticationController = {
         success: true,
         message: "Đăng nhập thành công",
         accessToken,
-        refreshToken
+        refreshToken,
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -89,20 +108,29 @@ const AuthenticationController = {
     try {
       const { refreshToken } = req.body;
       if (!refreshToken) {
-        return res.status(400).json({ success: false, message: "Refresh Token là bắt buộc" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Refresh Token là bắt buộc" });
       }
 
       // Kiểm tra token trong database
       const user = await userModel.findOne({ refreshToken }).populate("role");
       if (!user) {
-        return res.status(403).json({ success: false, message: "Refresh Token không hợp lệ" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Refresh Token không hợp lệ" });
       }
 
       // Xác thực token
       try {
         jwt.verify(refreshToken, process.env.JWT_SECRET);
       } catch (err) {
-        return res.status(403).json({ success: false, message: "Refresh Token đã hết hạn hoặc không hợp lệ" });
+        return res
+          .status(403)
+          .json({
+            success: false,
+            message: "Refresh Token đã hết hạn hoặc không hợp lệ",
+          });
       }
 
       // Tạo cặp token mới
@@ -116,7 +144,7 @@ const AuthenticationController = {
       res.status(200).json({
         success: true,
         accessToken: newAccessToken,
-        refreshToken: newRefreshToken
+        refreshToken: newRefreshToken,
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -128,7 +156,9 @@ const AuthenticationController = {
     try {
       const { refreshToken } = req.body;
       if (!refreshToken) {
-        return res.status(400).json({ success: false, message: "Refresh Token là bắt buộc" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Refresh Token là bắt buộc" });
       }
 
       const user = await userModel.findOne({ refreshToken });
@@ -140,7 +170,7 @@ const AuthenticationController = {
 
       res.status(200).json({
         success: true,
-        message: "Đăng xuất thành công"
+        message: "Đăng xuất thành công",
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -150,12 +180,28 @@ const AuthenticationController = {
   // Đăng ký tài khoản mới và gửi email xác thực
   register: async (req, res) => {
     try {
-      const { username, firstname, lastname, email, password, dateOfBirth, role } = req.body;
+      const { username, firstname, lastname, email, password, dateOfBirth } =
+        req.body;
 
       // Kiểm tra xem User đã tồn tại chưa
-      const existingUser = await userModel.findOne({ $or: [{ email }, { username }] });
+      const existingUser = await userModel.findOne({
+        $or: [{ email }, { username }],
+      });
       if (existingUser) {
-        return res.status(400).json({ success: false, message: "Username hoặc Email đã tồn tại" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Username hoặc Email đã tồn tại" });
+      }
+
+      // Lấy mặc định role "user" từ database (đã được seed sẵn)
+      const userRole = await roleModel.findOne({ name: "user" });
+      if (!userRole) {
+        return res
+          .status(500)
+          .json({
+            success: false,
+            message: "Lỗi hệ thống: Role 'user' chưa được khởi tạo",
+          });
       }
 
       // Hash mật khẩu
@@ -172,16 +218,22 @@ const AuthenticationController = {
         email,
         password: hashedPassword,
         dateOfBirth,
-        role,
+        role: userRole._id, // Luôn gán mặc định là Role "user"
         isVerified: false,
         verifyToken,
       });
 
       await newUser.save();
 
+      // Populate role để hiển thị tên role trong response
+      await newUser.populate({
+        path: "role",
+        select: "name",
+      });
+
       // Gửi email xác thực
       const verificationUrl = `http://localhost:3000/auth/verify-email?token=${verifyToken}&email=${email}`;
-      
+
       const mailOptions = {
         from: '"Website BuildPC Checker" <lookatwidget@gmail.com>',
         to: email,
@@ -203,7 +255,8 @@ const AuthenticationController = {
 
       res.status(201).json({
         success: true,
-        message: "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.",
+        message:
+          "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.",
         data: userResponse,
       });
     } catch (error) {
