@@ -1,4 +1,4 @@
-require('dotenv').config();
+require("dotenv").config();
 var createError = require("http-errors");
 var express = require("express");
 var path = require("path");
@@ -9,6 +9,10 @@ let mongoose = require("mongoose");
 var indexRouter = require("./routes/index");
 var usersRouter = require("./routes/users");
 
+// Swagger
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./utils/swagger");
+
 var app = express();
 
 // view engine setup
@@ -17,11 +21,22 @@ app.set("view engine", "hbs");
 
 app.use(logger("dev"));
 app.use(express.json());
+// Bắt lỗi Malformed JSON
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({
+      success: false,
+      message: "Dữ liệu JSON không hợp lệ (Malformed JSON)",
+    });
+  }
+  next();
+});
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Routes
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/", indexRouter);
 app.use("/auth", require("./routes/auth")); // Public routes (register, login, refresh)
 
@@ -29,6 +44,9 @@ app.use("/auth", require("./routes/auth")); // Public routes (register, login, r
 const authMiddleware = require("./utils/authMiddleware");
 app.use("/api/v1/users", authMiddleware, require("./routes/users"));
 app.use("/api/v1/roles", authMiddleware, require("./routes/roles"));
+app.use("/api/v1/support-entities", require("./routes/supportEntities"));
+app.use("/api/v1/pc-components", require("./routes/pcComponents"));
+app.use("/api/v1/files", require("./routes/files"));
 
 mongoose.connect(process.env.MONGODB_URI);
 mongoose.connection.on("connected", function () {
@@ -56,7 +74,10 @@ app.use(function (err, req, res, next) {
 
   // render the error page or send JSON
   res.status(err.status || 500);
-  if (req.originalUrl.startsWith("/api") || req.originalUrl.startsWith("/auth")) {
+  if (
+    req.originalUrl.startsWith("/api") ||
+    req.originalUrl.startsWith("/auth")
+  ) {
     return res.json({
       success: false,
       message: err.message,
