@@ -1,4 +1,4 @@
-const buildService = require('../services/build.service');
+const buildService = require('../services/buildService');
 
 const checkCompatibility = async (req, res) => {
   try {
