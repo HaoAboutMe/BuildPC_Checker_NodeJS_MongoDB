@@ -46,6 +46,7 @@ app.use("/api/v1/users", authMiddleware, require("./routes/users"));
 app.use("/api/v1/roles", authMiddleware, require("./routes/roles"));
 app.use("/api/v1/support-entities", require("./routes/supportEntities"));
 app.use("/api/v1/pc-components", require("./routes/pcComponents"));
+app.use("/api/v1/builds", require("./routes/builds"));
 app.use("/api/v1/files", require("./routes/files"));
 
 mongoose.connect(process.env.MONGODB_URI);
