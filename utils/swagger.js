@@ -39,6 +39,7 @@ const options = {
         description: "PC Component support entities",
       },
       { name: "PC Components", description: "PC hardware components" },
+      { name: "Builds", description: "PC Build compatibility and optimization" },
     ],
   },
   apis: ["./routes/*.js"], // Path to the API docs
