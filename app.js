@@ -4,6 +4,7 @@ var express = require("express");
 var path = require("path");
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
+var cors = require("cors");
 let mongoose = require("mongoose");
 
 var indexRouter = require("./routes/index");
@@ -14,6 +15,8 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./utils/swagger");
 
 var app = express();
+
+app.use(cors()); // Enable CORS for all routes
 
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
