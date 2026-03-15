@@ -22,7 +22,12 @@
     *   Cảnh báo Bus RAM chưa đạt mức tối ưu cho DDR4/DDR5.
     *   Cảnh báo giảm tốc độ PCIe nếu mainboard hỗ trợ chuẩn thấp hơn VGA.
 *   **💾 Quản lý cấu hình (Build Management):** Cho phép người dùng lưu trữ, cập nhật và quản lý các bộ máy đã xây dựng sau khi đăng nhập.
+*   **⚖️ Kiểm tra nghẽn cổ chai (Bottleneck Checker):** 
+    *   Phân tích sự cân bằng giữa CPU và GPU.
+    *   Tính toán bottleneck dựa trên điểm Benchmark (PassMark) và trọng số riêng biệt cho các độ phân giải: **1080p, 1440p (2K), 4K**.
+    *   Đưa ra các cảnh báo và lời khuyên nâng cấp chuyên sâu cho từng kịch bản sử dụng.
 *   **📚 Tài liệu API trực quan:** Tích hợp Swagger UI giúp việc thử nghiệm và tích hợp Frontend trở nên dễ dàng.
+
 
 ---
 
