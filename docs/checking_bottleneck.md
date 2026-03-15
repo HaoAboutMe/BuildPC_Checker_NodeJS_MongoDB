@@ -8,11 +8,11 @@ Chức năng này **chỉ tập trung vào bottleneck CPU ↔ GPU**, vì trong c
 
 Các tối ưu khác như:
 
-* RAM bus thấp
-* RAM dung lượng thấp
-* PSU dư / thiếu
-* Cooler chưa tối ưu
-* Storage chậm
+- RAM bus thấp
+- RAM dung lượng thấp
+- PSU dư / thiếu
+- Cooler chưa tối ưu
+- Storage chậm
 
 đã được xử lý bởi **API Warning / Compatibility khác**, nên **API này chỉ tập trung duy nhất vào bottleneck CPU và GPU**.
 
@@ -53,11 +53,11 @@ https://www.videocardbenchmark.net/gpu.php?id=GPU_ID
 
 CPU:
 
-* `CPU Mark`
+- `CPU Mark`
 
 GPU:
 
-* `G3D Mark`
+- `G3D Mark`
 
 Các điểm này sẽ được **lưu trực tiếp trong database** khi seed dữ liệu linh kiện.
 
@@ -84,7 +84,7 @@ Hệ thống **không crawl benchmark runtime**.
 # 3. Endpoint API
 
 ```
-POST /api/builds/check-bottleneck
+POST /api/v1/builds/check-bottleneck
 ```
 
 ---
@@ -330,10 +330,10 @@ ratio = 8716 / 16747 = 0.52
 
 Phương pháp này:
 
-* đơn giản
-* deterministic
-* dễ maintain
-* dễ scale
+- đơn giản
+- deterministic
+- dễ maintain
+- dễ scale
 
 Không phụ thuộc AI.
 
@@ -345,12 +345,12 @@ AI có thể được dùng **ở bước generate explanation**, nhưng **khôn
 
 Chức năng Bottleneck Checker:
 
-* sử dụng benchmark từ PassMark
-* tính toán dựa trên CPU/GPU score
-* đánh giá bottleneck cho 3 độ phân giải
-* trả kết quả rõ ràng cho frontend
+- sử dụng benchmark từ PassMark
+- tính toán dựa trên CPU/GPU score
+- đánh giá bottleneck cho 3 độ phân giải
+- trả kết quả rõ ràng cho frontend
 
 Hệ thống này hoạt động độc lập với:
 
-* Compatibility Checker
-* Hardware Warning Engine
+- Compatibility Checker
+- Hardware Warning Engine
