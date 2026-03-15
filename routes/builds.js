@@ -78,6 +78,66 @@ router.post('/check-compatibility', buildController.checkCompatibility);
 
 /**
  * @swagger
+ * /api/v1/builds/check-bottleneck:
+ *   post:
+ *     summary: Kiểm tra nghẽn cổ chai (Bottleneck) CPU và GPU
+ *     tags: [Builds]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cpuId
+ *               - vgaId
+ *             properties:
+ *               cpuId:
+ *                 type: string
+ *               vgaId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Trả về kết quả kiểm tra nghẽn cổ chai cho 3 độ phân giải
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cpu:
+ *                       type: object
+ *                       properties:
+ *                         name:
+ *                           type: string
+ *                         score:
+ *                           type: number
+ *                     gpu:
+ *                       type: object
+ *                       properties:
+ *                         name:
+ *                           type: string
+ *                         score:
+ *                           type: number
+ *                     results:
+ *                       type: object
+ *                       properties:
+ *                         1080p:
+ *                           $ref: '#/components/schemas/BottleneckResult'
+ *                         2k:
+ *                           $ref: '#/components/schemas/BottleneckResult'
+ *                         4k:
+ *                           $ref: '#/components/schemas/BottleneckResult'
+ */
+router.post('/check-bottleneck', buildController.checkBottleneck);
+
+
+/**
+ * @swagger
  * /api/v1/builds/save-build:
  *   post:
  *     summary: Lưu cấu hình PC của người dùng
@@ -215,3 +275,25 @@ router.put('/my-builds/:id', authMiddleware, buildController.updateMyBuild);
 router.delete('/my-builds/:id', authMiddleware, buildController.deleteMyBuild);
 
 module.exports = router;
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     BottleneckResult:
+ *       type: object
+ *       properties:
+ *         bottleneck:
+ *           type: boolean
+ *         type:
+ *           type: string
+ *           enum: [CPU, GPU, NONE, UNKNOWN]
+ *         severity:
+ *           type: string
+ *           enum: [NONE, LOW, MEDIUM, HIGH]
+ *         ratio:
+ *           type: number
+ *         message:
+ *           type: string
+ */
+

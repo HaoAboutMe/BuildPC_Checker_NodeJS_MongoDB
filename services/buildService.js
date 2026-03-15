@@ -15,6 +15,8 @@ const vgaChecker = require('./compatibility/vgaChecker');
 const storageChecker = require('./compatibility/storageChecker');
 const coolerChecker = require('./compatibility/coolerChecker');
 const powerChecker = require('./compatibility/powerChecker');
+const bottleneckService = require('./bottleneckService');
+
 
 /**
  * Fetch a component by ID and populate its support entities
@@ -179,11 +181,46 @@ const deleteUserBuild = async (userId, buildId) => {
   return result;
 };
 
+const checkBottleneck = async (buildData) => {
+  const { cpuId, vgaId } = buildData;
+
+  if (!cpuId || !vgaId) {
+    const error = new Error('Thiếu CPU hoặc GPU để kiểm tra bottleneck.');
+    error.status = 400;
+    throw error;
+  }
+
+  const [cpu, vga] = await Promise.all([
+    Cpu.findById(cpuId),
+    Vga.findById(vgaId)
+  ]);
+
+  if (!cpu) throw new Error('Không tìm thấy thông tin CPU.');
+  if (!vga) throw new Error('Không tìm thấy thông tin VGA.');
+
+  const results = bottleneckService.calculateBottleneck(cpu, vga);
+
+  return {
+    cpu: {
+      name: cpu.name,
+      score: cpu.score || 0
+    },
+    gpu: {
+      name: vga.name,
+      score: vga.score || 0
+    },
+    results
+  };
+};
+
+
 module.exports = {
   checkCompatibility,
   saveBuild,
   getUserBuilds,
   getUserBuildById,
   updateUserBuild,
-  deleteUserBuild
+  deleteUserBuild,
+  checkBottleneck
 };
+

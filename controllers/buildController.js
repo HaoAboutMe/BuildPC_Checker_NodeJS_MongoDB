@@ -110,11 +110,31 @@ const deleteMyBuild = async (req, res) => {
   }
 };
 
+const checkBottleneck = async (req, res) => {
+  try {
+    const buildData = req.body;
+    const result = await buildService.checkBottleneck(buildData);
+
+    return res.status(200).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error in checkBottleneck:', error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Có lỗi xảy ra khi kiểm tra nghẽn cổ chai'
+    });
+  }
+};
+
 module.exports = {
   checkCompatibility,
   saveBuild,
   getAllMyBuilds,
   getMyBuildById,
   updateMyBuild,
-  deleteMyBuild
+  deleteMyBuild,
+  checkBottleneck
 };
+
