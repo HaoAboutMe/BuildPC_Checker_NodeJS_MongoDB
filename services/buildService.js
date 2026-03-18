@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Cpu = require('../schemas/cpu');
 const Mainboard = require('../schemas/mainboard');
 const Ram = require('../schemas/ram');
@@ -21,10 +22,33 @@ const bottleneckService = require('./bottleneckService');
 /**
  * Fetch a component by ID and populate its support entities
  */
-async function fetchComponent(Model, id) {
+async function fetchComponent(Model, id, componentName) {
   if (!id) return null;
+  
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new Error(`ID của ${componentName} không hợp lệ`);
+  }
+
   const populatePaths = Model.getPopulatePaths ? Model.getPopulatePaths() : [];
-  return await Model.findById(id).populate(populatePaths);
+  const component = await Model.findById(id).populate(populatePaths);
+  
+  if (!component) {
+    throw new Error(`Không tìm thấy ${componentName} với ID: "${id}"`);
+  }
+  
+  return component;
+}
+
+/**
+ * Validates an array of ObjectId strings
+ */
+function validateObjectIdArray(ids, componentName) {
+  if (!Array.isArray(ids)) return;
+  for (const id of ids) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error(`ID của ${componentName} không hợp lệ: "${id}"`);
+    }
+  }
 }
 
 const checkCompatibility = async (build) => {
@@ -37,25 +61,38 @@ const checkCompatibility = async (build) => {
     ramId,
     ramQuantity = 1,
     vgaId,
-    ssdIds = [],
-    hddIds = [],
-    psuId,
-    caseId,
-    coolerId
   } = build;
+  
+  // Ensure ssdIds and hddIds are arrays
+  const ssdIds = Array.isArray(build.ssdIds) ? build.ssdIds : [];
+  const hddIds = Array.isArray(build.hddIds) ? build.hddIds : [];
+  const psuId = build.psuId;
+  const caseId = build.caseId;
+  const coolerId = build.coolerId;
+
+  // Validate component IDs
+  validateObjectIdArray(ssdIds, 'SSD');
+  validateObjectIdArray(hddIds, 'HDD');
 
   // Fetch components in parallel
   const [cpu, mainboard, ram, vga, ssds, hdds, psu, pcCase, cooler] = await Promise.all([
-    fetchComponent(Cpu, cpuId),
-    fetchComponent(Mainboard, mainboardId),
-    fetchComponent(Ram, ramId),
-    fetchComponent(Vga, vgaId),
+    fetchComponent(Cpu, cpuId, 'CPU'),
+    fetchComponent(Mainboard, mainboardId, 'Mainboard'),
+    fetchComponent(Ram, ramId, 'RAM'),
+    fetchComponent(Vga, vgaId, 'VGA'),
     ssdIds.length ? Ssd.find({ _id: { $in: ssdIds } }).populate(Ssd.getPopulatePaths ? Ssd.getPopulatePaths() : []) : Promise.resolve([]),
     hddIds.length ? Hdd.find({ _id: { $in: hddIds } }).populate(Hdd.getPopulatePaths ? Hdd.getPopulatePaths() : []) : Promise.resolve([]),
-    fetchComponent(Psu, psuId),
-    fetchComponent(PcCase, caseId),
-    fetchComponent(Cooler, coolerId)
+    fetchComponent(Psu, psuId, 'PSU'),
+    fetchComponent(PcCase, caseId, 'Vỏ case'),
+    fetchComponent(Cooler, coolerId, 'Tản nhiệt')
   ]);
+
+  if (ssdIds.length !== ssds.length) {
+    throw new Error('Một hoặc nhiều SSD không tìm thấy trong hệ thống.');
+  }
+  if (hddIds.length !== hdds.length) {
+    throw new Error('Một hoặc nhiều HDD không tìm thấy trong hệ thống.');
+  }
 
   const components = { cpu, mainboard, ram, vga, ssds, hdds, psu, pcCase, cooler };
 
@@ -76,6 +113,16 @@ const checkCompatibility = async (build) => {
 };
 
 const saveBuild = async (userId, buildData) => {
+  // Kiểm tra trùng tên trong phạm vi tài khoản
+  const existingBuild = await Build.findOne({
+    user: userId,
+    name: buildData.name,
+    isDeleted: false,
+  });
+  if (existingBuild) {
+    throw new Error(`Bạn đã có cấu hình tên "${buildData.name}". Vui lòng chọn tên khác.`);
+  }
+
   // Check compatibility first
   const compatResult = await checkCompatibility(buildData);
 
@@ -92,7 +139,7 @@ const saveBuild = async (userId, buildData) => {
     cpu: buildData.cpuId || null,
     mainboard: buildData.mainboardId || null,
     ram: buildData.ramId || null,
-    ramQuantity: buildData.ramQuantity || 1,
+    ramQuantity: buildData.ramId ? (buildData.ramQuantity ?? 1) : 0,
     vga: buildData.vgaId || null,
     ssds: buildData.ssdIds || [],
     hdds: buildData.hddIds || [],
@@ -111,6 +158,9 @@ const getUserBuilds = async (userId) => {
 };
 
 const getUserBuildById = async (userId, buildId) => {
+  if (!mongoose.Types.ObjectId.isValid(buildId)) {
+    throw new Error(`ID cấu hình không hợp lệ: "${buildId}"`);
+  }
   const build = await Build.findOne({ _id: buildId, user: userId, isDeleted: false })
     .populate('cpu mainboard ram vga ssds hdds psu pcCase cooler', 'name');
   
@@ -121,10 +171,26 @@ const getUserBuildById = async (userId, buildId) => {
 };
 
 const updateUserBuild = async (userId, buildId, buildData) => {
+  if (!mongoose.Types.ObjectId.isValid(buildId)) {
+    throw new Error(`ID cấu hình không hợp lệ: "${buildId}"`);
+  }
   // Check ownership first
   const build = await Build.findOne({ _id: buildId, user: userId, isDeleted: false });
   if (!build) {
     throw new Error('Không tìm thấy cấu hình hoặc bạn không có quyền truy cập.');
+  }
+
+  // Kiểm tra trùng tên (nếu tên thay đổi)
+  if (buildData.name && buildData.name !== build.name) {
+    const duplicateName = await Build.findOne({
+      user: userId,
+      name: buildData.name,
+      isDeleted: false,
+      _id: { $ne: buildId },
+    });
+    if (duplicateName) {
+      throw new Error(`Bạn đã có cấu hình tên "${buildData.name}". Vui lòng chọn tên khác.`);
+    }
   }
 
   // Check compatibility if components are being updated
@@ -169,6 +235,9 @@ const updateUserBuild = async (userId, buildId, buildData) => {
 };
 
 const deleteUserBuild = async (userId, buildId) => {
+  if (!mongoose.Types.ObjectId.isValid(buildId)) {
+    throw new Error(`ID cấu hình không hợp lệ: "${buildId}"`);
+  }
   const result = await Build.findOneAndUpdate(
     { _id: buildId, user: userId, isDeleted: false },
     { isDeleted: true },
@@ -191,12 +260,9 @@ const checkBottleneck = async (buildData) => {
   }
 
   const [cpu, vga] = await Promise.all([
-    Cpu.findById(cpuId),
-    Vga.findById(vgaId)
+    fetchComponent(Cpu, cpuId, 'CPU'),
+    fetchComponent(Vga, vgaId, 'VGA')
   ]);
-
-  if (!cpu) throw new Error('Không tìm thấy thông tin CPU.');
-  if (!vga) throw new Error('Không tìm thấy thông tin VGA.');
 
   const results = bottleneckService.calculateBottleneck(cpu, vga);
 

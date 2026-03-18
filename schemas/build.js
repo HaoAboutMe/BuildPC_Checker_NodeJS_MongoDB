@@ -67,4 +67,14 @@ let buildSchema = mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Unique compound index: mỗi user không được có 2 build cùng tên (chỉ xét build chưa bị xóa)
+buildSchema.index(
+  { user: 1, name: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false },
+  }
+);
+
 module.exports = new mongoose.model("build", buildSchema);
