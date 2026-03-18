@@ -145,4 +145,85 @@ router.post("/refresh-token", AuthenticationController.refreshToken);
  */
 router.post("/logout", AuthenticationController.logout);
 
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Gửi mã OTP đặt lại mật khẩu về email
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "user@example.com"
+ *     responses:
+ *       200:
+ *         description: OTP đã được gửi (hoặc email không tồn tại - không tiết lộ)
+ */
+router.post(
+  "/forgot-password",
+  [body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(), validate],
+  AuthenticationController.forgotPassword
+);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Đặt lại mật khẩu bằng mã OTP
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "user@example.com"
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *               newPassword:
+ *                 type: string
+ *                 example: "NewPassword123!"
+ *     responses:
+ *       200:
+ *         description: Đặt lại mật khẩu thành công
+ *       400:
+ *         description: OTP không hợp lệ hoặc đã hết hạn
+ */
+router.post(
+  "/reset-password",
+  [
+    body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
+    body("otp").notEmpty().withMessage("Mã OTP không được để trống"),
+    body("newPassword")
+      .isStrongPassword({
+        minLength: 8,
+        minLowercase: 1,
+        minUppercase: 1,
+        minNumbers: 1,
+        minSymbols: 1,
+      })
+      .withMessage(
+        "Mật khẩu mới phải chứa ít nhất 1 ký tự viết hoa, 1 ký tự viết thường, 1 số, 1 ký tự đặc biệt và dài ít nhất 8 ký tự"
+      ),
+    validate,
+  ],
+  AuthenticationController.resetPassword
+);
+
 module.exports = router;

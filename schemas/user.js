@@ -49,6 +49,12 @@ let userSchema = mongoose.Schema(
     lastLogoutAt: {
       type: Date,
     },
+    resetPasswordOtp: {
+      type: String,
+    },
+    resetPasswordOtpExpires: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
