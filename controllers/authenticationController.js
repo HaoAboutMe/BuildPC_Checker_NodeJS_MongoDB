@@ -312,6 +312,139 @@ const AuthenticationController = {
       });
     }
   },
+  // Quên mật khẩu - gửi OTP qua email
+  forgotPassword: async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ success: false, message: "Vui lòng nhập email" });
+      }
+
+      const user = await userModel.findOne({ email: email.toLowerCase(), isDeleted: false });
+
+      // Luôn trả về thành công để tránh lộ thông tin tài khoản
+      if (!user) {
+        return res.status(200).json({
+          success: true,
+          message: "Nếu email tồn tại trong hệ thống, mã OTP sẽ được gửi trong vài giây.",
+        });
+      }
+
+      if (!user.isVerified) {
+        return res.status(403).json({
+          success: false,
+          message: "Tài khoản chưa được xác thực email. Vui lòng xác thực trước.",
+        });
+      }
+
+      // Tạo OTP 6 số
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Hash OTP trước khi lưu vào DB (bảo mật)
+      const hashedOtp = await bcrypt.hash(otp, 10);
+
+      // Lưu OTP hash và thời hạn 10 phút
+      user.resetPasswordOtp = hashedOtp;
+      user.resetPasswordOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+      await user.save();
+
+      // Gửi email chứa OTP
+      const mailOptions = {
+        from: '"Website BuildPC Checker" <lookatwidget@gmail.com>',
+        to: user.email,
+        subject: "Mã OTP đặt lại mật khẩu",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden;">
+            <div style="background-color: #1a1a2e; padding: 24px; text-align: center;">
+              <h2 style="color: #ffffff; margin: 0;">🔐 Đặt lại mật khẩu</h2>
+              <p style="color: #a0a0b0; margin: 8px 0 0;">BuildPC Checker</p>
+            </div>
+            <div style="padding: 32px;">
+              <p style="color: #333; font-size: 15px;">Xin chào <strong>${user.firstname} ${user.lastname}</strong>,</p>
+              <p style="color: #555; font-size: 14px;">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Sử dụng mã OTP bên dưới:</p>
+              <div style="background-color: #f4f6ff; border: 2px dashed #4f46e5; border-radius: 10px; padding: 20px; text-align: center; margin: 24px 0;">
+                <p style="margin: 0; font-size: 12px; color: #888; letter-spacing: 1px; text-transform: uppercase;">MÃ OTP CỦA BẠN</p>
+                <h1 style="margin: 8px 0 0; font-size: 42px; letter-spacing: 10px; color: #4f46e5; font-weight: 900;">${otp}</h1>
+              </div>
+              <p style="color: #e53e3e; font-size: 13px; text-align: center;">⏳ Mã này có hiệu lực trong <strong>10 phút</strong>.</p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+              <p style="color: #999; font-size: 12px; text-align: center;">Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.<br/>Tài khoản của bạn vẫn an toàn.</p>
+            </div>
+          </div>
+        `,
+      };
+
+      await transporter.sendMail(mailOptions);
+
+      return res.status(200).json({
+        success: true,
+        message: "Nếu email tồn tại trong hệ thống, mã OTP sẽ được gửi trong vài giây.",
+      });
+    } catch (error) {
+      console.error("Error in forgotPassword:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  // Đặt lại mật khẩu bằng OTP
+  resetPassword: async (req, res) => {
+    try {
+      const { email, otp, newPassword } = req.body;
+
+      if (!email || !otp || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp đầy đủ email, mã OTP và mật khẩu mới",
+        });
+      }
+
+      const user = await userModel
+        .findOne({
+          email: email.toLowerCase(),
+          isDeleted: false,
+          resetPasswordOtpExpires: { $gt: new Date() }, // còn hạn
+        })
+        .select("+password");
+
+      if (!user || !user.resetPasswordOtp) {
+        return res.status(400).json({
+          success: false,
+          message: "Mã OTP không hợp lệ hoặc đã hết hạn",
+        });
+      }
+
+      // Kiểm tra OTP
+      const isOtpValid = await bcrypt.compare(otp, user.resetPasswordOtp);
+      if (!isOtpValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Mã OTP không hợp lệ hoặc đã hết hạn",
+        });
+      }
+
+      // Hash mật khẩu mới
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      // Cập nhật mật khẩu và xóa OTP
+      user.password = hashedPassword;
+      user.resetPasswordOtp = undefined;
+      user.resetPasswordOtpExpires = undefined;
+      // Vô hiệu hóa tất cả refresh token hiện tại
+      user.refreshToken = undefined;
+      user.lastLogoutAt = new Date();
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.",
+      });
+    } catch (error) {
+      console.error("Error in resetPassword:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 };
 
 module.exports = AuthenticationController;
