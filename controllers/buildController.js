@@ -13,7 +13,7 @@ const checkCompatibility = async (req, res) => {
     console.error('Error in checkCompatibility:', error);
     return res.status(500).json({
       success: false,
-      message: 'Có lỗi xảy ra khi kiểm tra tương thích: ' + error.message
+      message: error.message
     });
   }
 };
@@ -35,7 +35,7 @@ const saveBuild = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: error.message,
-      errors: error.errors || []
+      ...(error.errors && error.errors.length > 0 && { errors: error.errors })
     });
   }
 };
@@ -88,7 +88,7 @@ const updateMyBuild = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: error.message,
-      errors: error.errors || []
+      ...(error.errors && error.errors.length > 0 && { errors: error.errors })
     });
   }
 };
