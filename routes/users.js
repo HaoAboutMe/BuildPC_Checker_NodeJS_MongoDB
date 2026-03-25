@@ -206,6 +206,77 @@ router.get(
 
 /**
  * @swagger
+ * /api/v1/users/role/{roleId}:
+ *   get:
+ *     summary: List users by role ID (Admin only)
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Success
+ */
+router.get(
+  "/role/:roleId",
+  [
+    param("roleId").isMongoId().withMessage("Role ID không hợp lệ"),
+    validate,
+    isAdmin,
+  ],
+  UserController.getUsersByRole,
+);
+
+/**
+ * @swagger
+ * /api/v1/users/{id}/role:
+ *   put:
+ *     summary: Update user role (Admin only)
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role
+ *             properties:
+ *               role: { type: string, example: "65f...abc" }
+ *     responses:
+ *       200:
+ *         description: Role updated
+ */
+router.put(
+  "/:id/role",
+  [
+    param("id").isMongoId().withMessage("ID người dùng không hợp lệ"),
+    body("role")
+      .notEmpty()
+      .withMessage("Role ID là bắt buộc")
+      .isMongoId()
+      .withMessage("Role ID không hợp lệ"),
+    validate,
+    isAdmin,
+  ],
+  UserController.updateUserByAdmin,
+);
+
+/**
+ * @swagger
  * /api/v1/users/{id}:
  *   delete:
  *     summary: Soft delete user (Admin only)

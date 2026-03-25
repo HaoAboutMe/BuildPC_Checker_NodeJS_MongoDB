@@ -15,12 +15,50 @@ const validate = (req, res, next) => {
     next();
 };
 
-/* --- Role Routes (Admin Only) --- */
+/**
+ * @swagger
+ * tags:
+ *   name: Role
+ *   description: Role management (Admin only)
+ */
 
-// Get all roles
+/**
+ * @swagger
+ * /api/v1/roles:
+ *   get:
+ *     summary: Get all roles
+ *     tags: [Role]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 router.get("/", isAdmin, RoleController.getAllRoles);
 
-// Create a new role
+/**
+ * @swagger
+ * /api/v1/roles:
+ *   post:
+ *     summary: Create new role
+ *     tags: [Role]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name: { type: string, example: "moderator" }
+ *               description: { type: string, example: "Role for system moderation" }
+ *     responses:
+ *       201:
+ *         description: Role created
+ */
 router.post("/", [
     isAdmin,
     body('name').notEmpty().withMessage('Tên quyền không được để trống').trim().escape(),
@@ -28,21 +66,72 @@ router.post("/", [
     validate
 ], RoleController.createRole);
 
-// Get role by ID
+/**
+ * @swagger
+ * /api/v1/roles/{id}:
+ *   get:
+ *     summary: Get role by ID
+ *     tags: [Role]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 router.get("/:id", [
     isAdmin,
     param('id').isMongoId().withMessage('ID không hợp lệ'),
     validate
 ], RoleController.getRoleById);
 
-// Soft delete role
+/**
+ * @swagger
+ * /api/v1/roles/{id}:
+ *   delete:
+ *     summary: Delete role (Soft delete)
+ *     tags: [Role]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Role deleted
+ */
 router.delete("/:id", [
     isAdmin,
     param('id').isMongoId().withMessage('ID không hợp lệ'),
     validate
 ], RoleController.deleteRole);
 
-// Get all users belonging to a specific role ID
+/**
+ * @swagger
+ * /api/v1/roles/{id}/users:
+ *   get:
+ *     summary: Get all users by role ID
+ *     tags: [Role]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Success
+ */
 router.get("/:id/users", [
     isAdmin,
     param('id').isMongoId().withMessage('ID không hợp lệ'),
