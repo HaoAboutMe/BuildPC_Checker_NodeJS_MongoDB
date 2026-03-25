@@ -94,6 +94,57 @@ const UserController = {
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
     }
+  },
+  
+  // Admin cập nhật vai trò (role) của bất kỳ user nào
+  updateUserByAdmin: async (req, res) => {
+    try {
+      const { role } = req.body;
+      const targetUserId = req.params.id;
+
+      if (!role) {
+        return res.status(400).json({ success: false, message: "Vui lòng cung cấp Role ID" });
+      }
+
+      const updatedUser = await userModel.findByIdAndUpdate(
+        targetUserId,
+        { role },
+        { new: true, runValidators: true }
+      ).populate({
+        path: "role",
+        select: "name",
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ success: false, message: "Người dùng không tồn tại" });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Cập nhật vai trò người dùng thành công",
+        data: updatedUser
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  },
+
+  // Lấy danh sách user theo Role ID
+  getUsersByRole: async (req, res) => {
+    try {
+      const { roleId } = req.params;
+      const users = await userModel.find({ role: roleId, isDeleted: false }).populate({
+        path: "role",
+        select: "name",
+      });
+
+      res.status(200).json({
+        success: true,
+        data: users,
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   }
 };
 
