@@ -30,7 +30,7 @@ const authMiddleware = require("../utils/authMiddleware");
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 url: { type: string, example: "http://localhost:3000/uploads/xyz.jpg" }
+ *                 url: { type: string, example: "https://res.cloudinary.com/demo/image/upload/v12345/xyz.webp" }
  */
 router.post(
   "/upload",
