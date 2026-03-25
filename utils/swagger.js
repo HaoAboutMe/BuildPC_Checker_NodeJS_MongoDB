@@ -33,6 +33,7 @@ const options = {
     tags: [
       { name: "Auth", description: "Authentication management" },
       { name: "User", description: "User profile and management" },
+      { name: "Role", description: "Role management (Admin only)" },
       { name: "File", description: "File upload management" },
       {
         name: "Support Entities",

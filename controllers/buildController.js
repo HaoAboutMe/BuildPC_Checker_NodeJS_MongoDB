@@ -27,8 +27,8 @@ const saveBuild = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      data: savedBuild,
-      message: "Lưu cấu hình thành công"
+      message: "Lưu cấu hình thành công",
+      data: savedBuild
     });
   } catch (error) {
     console.error('Error in saveBuild:', error);
