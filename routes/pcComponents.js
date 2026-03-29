@@ -5,6 +5,7 @@ const { isAdmin } = require("../utils/roleMiddleware");
 const authMiddleware = require("../utils/authMiddleware");
 const { body, param, validationResult } = require("express-validator");
 
+
 // Common middleware to handle validation results
 const validate = (req, res, next) => {
   const errors = validationResult(req);
@@ -69,6 +70,101 @@ const components = [
  * tags:
  *   name: PC Components
  *   description: Management for PC hardware components
+ */
+
+/**
+ * @swagger
+ * /api/v1/pc-components/import:
+ *   post:
+ *     summary: Import linh kiện PC từ file Excel (Chunk-level Transaction)
+ *     tags: [PC Components]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [cpu, mainboard, ram, vga, ssd, hdd, psu, pc-case, cooler]
+ *         description: Loại linh kiện cần import
+ *       - in: query
+ *         name: socket
+ *         schema: { type: string }
+ *         description: "ObjectId của Socket (bắt buộc cho cpu, mainboard)"
+ *       - in: query
+ *         name: pcieVersion
+ *         schema: { type: string }
+ *         description: "ObjectId của PcieVersion (bắt buộc cho cpu, vga)"
+ *       - in: query
+ *         name: ramType
+ *         schema: { type: string }
+ *         description: "ObjectId của RamType (bắt buộc cho ram, mainboard)"
+ *       - in: query
+ *         name: powerConnector
+ *         schema: { type: string }
+ *         description: "ObjectId của PcieConnector (bắt buộc cho vga)"
+ *       - in: query
+ *         name: ssdType
+ *         schema: { type: string }
+ *         description: "ObjectId của SsdType (bắt buộc cho ssd)"
+ *       - in: query
+ *         name: formFactor
+ *         schema: { type: string }
+ *         description: "ObjectId của FormFactor (bắt buộc cho ssd, hdd)"
+ *       - in: query
+ *         name: interfaceType
+ *         schema: { type: string }
+ *         description: "ObjectId của InterfaceType (bắt buộc cho ssd, hdd)"
+ *       - in: query
+ *         name: size
+ *         schema: { type: string }
+ *         description: "ObjectId của CaseSize (bắt buộc cho mainboard, pc-case)"
+ *       - in: query
+ *         name: pcieVgaVersion
+ *         schema: { type: string }
+ *         description: "ObjectId của PcieVersion cho VGA slot (bắt buộc cho mainboard)"
+ *       - in: query
+ *         name: coolerType
+ *         schema: { type: string }
+ *         description: "ObjectId của CoolerType (bắt buộc cho cooler)"
+ *       - in: query
+ *         name: pcieConnectors
+ *         schema: { type: string }
+ *         description: "Danh sách ObjectId của PcieConnector, ngăn cách bằng dấu phẩy (tuỳ chọn cho psu)"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File Excel (.xlsx) chứa dữ liệu linh kiện (Row 1 là header, Row 2 trở đi là dữ liệu)
+ *     responses:
+ *       200:
+ *         description: Import hoàn tất (có thể có chunk thất bại)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Import hoàn tất tiến trình" }
+ *                 totalRows: { type: number, example: 120 }
+ *                 totalSuccessChunks: { type: number, example: 2 }
+ *                 totalFailedChunks: { type: number, example: 1 }
+ *                 failedChunks:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       rows: { type: string, example: "52-101" }
+ *                       reason: { type: string, example: "E11000 duplicate key error" }
+ *       400:
+ *         description: Thiếu file, sai loại file, hoặc thiếu query param bắt buộc
  */
 
 /**
