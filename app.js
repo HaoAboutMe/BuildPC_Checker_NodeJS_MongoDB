@@ -51,6 +51,8 @@ app.use("/api/v1/support-entities", require("./routes/supportEntities"));
 app.use("/api/v1/pc-components", require("./routes/pcComponents"));
 app.use("/api/v1/builds", require("./routes/builds"));
 app.use("/api/v1/files", require("./routes/files"));
+app.use("/api/v1/forum", require("./routes/forum"));
+app.use("/api/v1/chat", require("./routes/chat"));
 
 mongoose.connect(process.env.MONGODB_URI);
 mongoose.connection.on("connected", function () {
