@@ -27,23 +27,39 @@ const UserController = {
   // Cập nhật profile bản thân
   updateProfile: async (req, res) => {
     try {
-      const { username, firstname, lastname, dateOfBirth } = req.body;
+      const { firstname, lastname, dateOfBirth } = req.body;
       const userId = req.user.id;
 
-      // Kiểm tra username duy nhất (nếu có thay đổi)
-      if (username) {
-        const existingUser = await userModel.findOne({ 
-          username, 
-          _id: { $ne: userId } 
+      const allowedFields = ["firstname", "lastname", "dateOfBirth"];
+      const requestFields = Object.keys(req.body || {});
+      const hasDisallowedField = requestFields.some((field) => !allowedFields.includes(field));
+      if (hasDisallowedField) {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ được phép cập nhật firstname, lastname, dateOfBirth",
         });
-        if (existingUser) {
-          return res.status(400).json({ success: false, message: "Username đã được sử dụng" });
-        }
+      }
+
+      const updateData = {};
+      if (firstname !== undefined) updateData.firstname = firstname;
+      if (lastname !== undefined) updateData.lastname = lastname;
+      if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp ít nhất một trường để cập nhật",
+        });
+      }
+
+      const existingUser = await userModel.findById(userId);
+      if (!existingUser || existingUser.isDeleted) {
+        return res.status(404).json({ success: false, message: "Người dùng không tồn tại" });
       }
 
       const updatedUser = await userModel.findByIdAndUpdate(
         userId,
-        { username, firstname, lastname, dateOfBirth },
+        updateData,
         { new: true, runValidators: true }
       ).populate({
         path: "role",
