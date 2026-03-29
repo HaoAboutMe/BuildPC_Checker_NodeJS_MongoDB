@@ -251,7 +251,8 @@ async function processChunk(Model, chunkDocs, startRow) {
     await session.commitTransaction();
     return { success: true };
   } catch (error) {
-    await session.abortTransaction();
+    // Wrap riêng để tránh crash nếu transaction chưa start (vd: standalone MongoDB)
+    try { await session.abortTransaction(); } catch (_) {}
     return {
       success: false,
       rows: `${startRow}-${endRow}`,
@@ -299,39 +300,33 @@ const importHandler = async (req, res) => {
 
     const { model: Model, columns } = mapper;
 
-    // ── Build ref cache 1 lần trước khi đọc từng row ─────────────────
+    // ── Build ref cache 1 lần ─────────────────────────────────────────
     const refCache = await buildRefCache(columns);
 
-    // ── Duyệt từng row ───────────────────────────────────────────────
+    // ── Lấy danh sách hàng dữ liệu (bỏ header row 1) ─────────────────
     const dataRows = [];
     worksheet.eachRow((row, rowIdx) => {
-      if (rowIdx === 1) return; // bỏ header
-      dataRows.push(row);
+      if (rowIdx === 1) return;
+      dataRows.push({ row, excelRowNum: rowIdx });
     });
 
-    let chunkDocs = [];
-    let chunkStartRow = 2; // row 1 là header, data bắt đầu từ row 2
-    let currentChunkStart = 2;
+    let totalRows = 0;
     let totalSuccessChunks = 0;
     const failedChunks = [];
-    let totalRows = 0;
 
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = dataRows[i];
-      const excelRowNum = i + 2; // +2 vì bỏ header
+    // ── Parse 1 row → { doc, hasName, error } ────────────────────────
+    function parseRow(row, excelRowNum) {
       const doc = {};
       let hasName = false;
       let rowError = null;
 
       for (const colDef of columns) {
+        if (rowError) break;
         const rawValue = row.getCell(colDef.col).value;
 
         if (colDef.type === "ref") {
           const { id, error } = resolveRef(refCache, colDef.field, rawValue);
-          if (error) {
-            rowError = `Dòng ${excelRowNum}: ${error}`;
-            break;
-          }
+          if (error) { rowError = `Dòng ${excelRowNum}: ${error}`; break; }
           if (id) doc[colDef.field] = id;
 
         } else if (colDef.type === "ref-array") {
@@ -343,7 +338,6 @@ const importHandler = async (req, res) => {
               if (error) { rowError = `Dòng ${excelRowNum}: ${error}`; break; }
               if (id) ids.push(id);
             }
-            if (rowError) break;
             doc[colDef.field] = ids;
           }
 
@@ -354,36 +348,69 @@ const importHandler = async (req, res) => {
         }
       }
 
-      // Bỏ qua hàng trống (không có name)
-      if (!hasName) continue;
+      return { doc, hasName, error: rowError };
+    }
 
-      totalRows++;
+    // ── Duyệt từng CHUNK (mỗi chunk = CHUNK_SIZE dòng) ───────────────
+    let i = 0;
+    while (i < dataRows.length) {
+      // Thu thập đủ CHUNK_SIZE dòng hợp lệ (có name) vào 1 chunk
+      const chunkItems = []; // [{ doc, excelRowNum, error }]
+      const chunkErrors = []; // TẤT CẢ lỗi trong chunk
 
-      // Nếu dòng có lỗi ref lookup → đánh fail ngay chunk hiện tại
-      if (rowError) {
-        // Flush chunk đang chứa trước (nếu có) — không fail chunk vô tội
-        if (chunkDocs.length > 0) {
-          const result = await processChunk(Model, chunkDocs, currentChunkStart);
-          result.success ? totalSuccessChunks++ : failedChunks.push({ rows: result.rows, reason: result.reason });
-          chunkDocs = [];
-        }
-        // Đánh fail chunk 1 dòng này
-        failedChunks.push({ rows: `${excelRowNum}`, reason: rowError });
-        currentChunkStart = excelRowNum + 1;
-        continue;
+      while (chunkItems.length < CHUNK_SIZE && i < dataRows.length) {
+        const { row, excelRowNum } = dataRows[i];
+        i++;
+
+        const { doc, hasName, error } = parseRow(row, excelRowNum);
+        if (!hasName) continue; // bỏ dòng trống
+
+        totalRows++;
+        chunkItems.push({ doc, excelRowNum, error });
+
+        // Thu thập TẤT CẢ lỗi ref (không dừng ở lỗi đầu tiên)
+        if (error) chunkErrors.push(error);
       }
 
-      chunkDocs.push(doc);
+      if (chunkItems.length === 0) continue;
 
-      // Đủ CHUNK_SIZE hoặc hết file → xử lý chunk
-      const isLast = i === dataRows.length - 1;
-      if (chunkDocs.length === CHUNK_SIZE || (isLast && chunkDocs.length > 0)) {
-        const result = await processChunk(Model, chunkDocs, currentChunkStart);
-        result.success
-          ? totalSuccessChunks++
-          : failedChunks.push({ rows: result.rows, reason: result.reason });
-        chunkDocs = [];
-        currentChunkStart = excelRowNum + 1;
+      const chunkStartRow = chunkItems[0].excelRowNum;
+      const chunkEndRow = chunkItems[chunkItems.length - 1].excelRowNum;
+      const rowsRange =
+        chunkStartRow === chunkEndRow
+          ? `${chunkStartRow}`
+          : `${chunkStartRow}-${chunkEndRow}`;
+
+      // ── Pre-check trùng tên với DB (luôn chạy để báo đủ lỗi) ────────
+      const names = chunkItems.map((item) => item.doc.name).filter(Boolean);
+      if (names.length > 0) {
+        const duplicates = await Model.find(
+          { name: { $in: names }, isDeleted: false },
+          { name: 1 }
+        );
+        duplicates.forEach((dup) => {
+          const matchItem = chunkItems.find((item) => item.doc.name === dup.name);
+          const rowInfo = matchItem ? `Dòng ${matchItem.excelRowNum}` : "Không rõ dòng";
+          chunkErrors.push(`${rowInfo}: Tên "${dup.name}" đã tồn tại trong hệ thống`);
+        });
+      }
+
+      if (chunkErrors.length > 0) {
+        // ── Có ít nhất 1 lỗi → FAIL toàn bộ chunk, không insert gì cả
+        failedChunks.push({
+          rows: rowsRange,
+          reasons: chunkErrors, // mảng tất cả lý do
+          reason: chunkErrors.join(" | "), // gộp thành 1 string tiện đọc
+        });
+      } else {
+        // ── Tất cả dòng hợp lệ → thử insert với Transaction
+        const docs = chunkItems.map((item) => item.doc);
+        const result = await processChunk(Model, docs, chunkStartRow);
+        if (result.success) {
+          totalSuccessChunks++;
+        } else {
+          failedChunks.push({ rows: result.rows, reason: result.reason });
+        }
       }
     }
 
