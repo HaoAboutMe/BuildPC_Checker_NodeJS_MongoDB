@@ -45,6 +45,9 @@ const initSocket = (server) => {
     io.on('connection', (socket) => {
         console.log(`User connected: ${socket.user.username} (${socket.id})`);
 
+        // Tự động join vào phòng cá nhân dựa trên User ID để nhận thông báo toàn hệ thống
+        socket.join(socket.user._id.toString());
+
         // Join room chat 1-1
         socket.on('join_chat', ({ targetUserId }) => {
             if (!targetUserId) return;
@@ -84,8 +87,12 @@ const initSocket = (server) => {
                 // Lấy room name và phát Broadcast tới phòng
                 const roomName = getRoomName(senderId, receiverId);
                 
-                // Emit tin nhắn cho tất cả người trong phòng (bao gồm cả người gửi để họ cập nhật UI)
+                // Emit tin nhắn cho tất cả người trong phòng chat chung
                 io.to(roomName).emit('receive_message', newMessage);
+
+                // Gửi thêm tới phòng cá nhân của người nhận để họ nhận được dù ở bất cứ đâu
+                // Lưu ý: Socket.io tự xử lý để một socket không nhận tin nhắn trùng lặp nếu họ đang ở cả 2 phòng
+                io.to(receiverId.toString()).emit('receive_message', newMessage);
 
             } catch (error) {
                 console.error("Socket send_message error:", error);
