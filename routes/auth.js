@@ -56,7 +56,11 @@ const registerValidation = [
     .notEmpty()
     .withMessage("username không được để trống")
     .isLength({ min: 3 })
-    .withMessage("username phải ít nhất 3 ký tự"),
+    .withMessage("username phải ít nhất 3 ký tự")
+    .matches(/^[a-zA-Z][a-zA-Z0-9]*$/)
+    .withMessage(
+      "Username không được chứa khoảng trắng, dấu tiếng Việt, ký tự đặc biệt và không được bắt đầu bằng số",
+    ),
   body("firstname").notEmpty().withMessage("firstname không được để trống"),
   body("lastname").notEmpty().withMessage("lastname không được để trống"),
   body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),

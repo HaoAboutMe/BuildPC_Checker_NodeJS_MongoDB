@@ -1,10 +1,25 @@
 var express = require("express");
 var router = express.Router();
 const multer = require("multer");
-const FileController = require("../controllers/fileController");
+const { storage } = require("../utils/cloudinary");
 const { importHandler } = require("../controllers/importController");
 const authMiddleware = require("../utils/authMiddleware");
 const { isAdmin } = require("../utils/roleMiddleware");
+
+// Cloudinary storage — dùng cho upload ảnh
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Chỉ được phép tải lên tệp hình ảnh!"), false);
+  }
+};
+
+const uploadCloudinary = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+});
 
 // Multer memory storage — chỉ dùng cho import Excel (không lưu đĩa)
 const uploadExcel = multer({
@@ -54,9 +69,23 @@ const uploadExcel = multer({
  */
 router.post(
   "/upload",
-  authMiddleware,
-  FileController.uploadMiddleware,
-  FileController.uploadImage,
+  [authMiddleware, isAdmin, uploadCloudinary.single("image")],
+  (req, res) => {
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Vui lòng chọn một tệp để tải lên" });
+    }
+
+    // Với cloudinary-storage, req.file.path là URL của ảnh trên Cloudinary
+    const imageUrl = req.file.path;
+
+    res.status(200).json({
+      success: true,
+      message: "Tải lên ảnh thành công",
+      url: imageUrl,
+    });
+  }
 );
 
 /**
