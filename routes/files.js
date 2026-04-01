@@ -69,8 +69,7 @@ const uploadExcel = multer({
  */
 router.post(
   "/upload",
-  authMiddleware,
-  uploadCloudinary.single("image"),
+  [authMiddleware, isAdmin, uploadCloudinary.single("image")],
   (req, res) => {
     if (!req.file) {
       return res
