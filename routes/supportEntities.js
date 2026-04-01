@@ -1,9 +1,19 @@
 const express = require("express");
 const router = express.Router();
-const supportEntityController = require("../controllers/supportEntityController");
 const { isAdmin } = require("../utils/roleMiddleware");
 const authMiddleware = require("../utils/authMiddleware");
 const { body, param, validationResult } = require("express-validator");
+
+// Schemas
+const Socket = require("../schemas/socket");
+const RamType = require("../schemas/ram-type");
+const PcieVersion = require("../schemas/pcie-version");
+const PcieConnector = require("../schemas/pcie-connector");
+const CoolerType = require("../schemas/cooler-type");
+const SsdType = require("../schemas/ssd-type");
+const InterfaceType = require("../schemas/interface-type");
+const FormFactor = require("../schemas/form-factor");
+const CaseSize = require("../schemas/case-size");
 
 // Common middleware to handle validation results
 const validate = (req, res, next) => {
@@ -16,34 +26,83 @@ const validate = (req, res, next) => {
   next();
 };
 
+// Generic CRUD Handlers
+const getAllHandler = (Model) => async (req, res) => {
+  try {
+    const query = { isDeleted: false };
+    let items = Model.find(query);
+    if (Model.getPopulatePaths) items = items.populate(Model.getPopulatePaths());
+    const data = await items;
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const createHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    if (req.body.name) {
+      const existing = await Model.findOne({ name: req.body.name, isDeleted: false });
+      if (existing) return res.status(400).json({ success: false, message: `${modelNameVi} đã tồn tại` });
+    }
+    const newItem = new Model(req.body);
+    await newItem.save();
+    res.status(201).json({ success: true, data: newItem });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+const getByIdHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    let item = Model.findById(req.params.id);
+    if (Model.getPopulatePaths) item = item.populate(Model.getPopulatePaths());
+    const data = await item;
+    if (!data || data.isDeleted) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+    }
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+  }
+};
+
+const updateHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!item || item.isDeleted) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+    }
+    res.status(200).json({ success: true, data: item });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+const deleteHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    const item = await Model.findById(req.params.id);
+    if (!item || item.isDeleted) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+    }
+    item.isDeleted = true;
+    await item.save();
+    res.status(200).json({ success: true, message: `Đã xóa ${modelNameVi.toLowerCase()} thành công` });
+  } catch (error) {
+    res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+  }
+};
+
 const entities = [
-  { path: "sockets", controller: supportEntityController.socketController },
-  { path: "ram-types", controller: supportEntityController.ramTypeController },
-  {
-    path: "pcie-versions",
-    controller: supportEntityController.pcieVersionController,
-  },
-  {
-    path: "pcie-connectors",
-    controller: supportEntityController.pcieConnectorController,
-  },
-  {
-    path: "cooler-types",
-    controller: supportEntityController.coolerTypeController,
-  },
-  { path: "ssd-types", controller: supportEntityController.ssdTypeController },
-  {
-    path: "interface-types",
-    controller: supportEntityController.interfaceTypeController,
-  },
-  {
-    path: "form-factors",
-    controller: supportEntityController.formFactorController,
-  },
-  {
-    path: "case-sizes",
-    controller: supportEntityController.caseSizeController,
-  },
+  { path: "sockets", model: Socket, nameVi: "Socket" },
+  { path: "ram-types", model: RamType, nameVi: "Loại RAM" },
+  { path: "pcie-versions", model: PcieVersion, nameVi: "Phiên bản PCIe" },
+  { path: "pcie-connectors", model: PcieConnector, nameVi: "Đầu cấp nguồn PCIe" },
+  { path: "cooler-types", model: CoolerType, nameVi: "Loại tản nhiệt" },
+  { path: "ssd-types", model: SsdType, nameVi: "Loại SSD" },
+  { path: "interface-types", model: InterfaceType, nameVi: "Giao tiếp" },
+  { path: "form-factors", model: FormFactor, nameVi: "Kích thước chuẩn" },
+  { path: "case-sizes", model: CaseSize, nameVi: "Kích cỡ vỏ case/mainboard" },
 ];
 
 /**
@@ -165,8 +224,9 @@ const entities = [
  *       200:
  *         description: Deleted successfully
  */
+
 entities.forEach((entity) => {
-  router.get(`/${entity.path}`, entity.controller.getAll);
+  router.get(`/${entity.path}`, getAllHandler(entity.model));
   router.post(
     `/${entity.path}`,
     [
@@ -175,12 +235,12 @@ entities.forEach((entity) => {
       body("name").notEmpty().withMessage("Tên không được để trống").trim(),
       validate,
     ],
-    entity.controller.create,
+    createHandler(entity.model, entity.nameVi)
   );
   router.get(
     `/${entity.path}/:id`,
     [param("id").isMongoId().withMessage("ID không hợp lệ"), validate],
-    entity.controller.getById,
+    getByIdHandler(entity.model, entity.nameVi)
   );
   router.put(
     `/${entity.path}/:id`,
@@ -191,7 +251,7 @@ entities.forEach((entity) => {
       body("name").optional().notEmpty().withMessage("Tên không được để trống"),
       validate,
     ],
-    entity.controller.update,
+    updateHandler(entity.model, entity.nameVi)
   );
   router.delete(
     `/${entity.path}/:id`,
@@ -201,7 +261,7 @@ entities.forEach((entity) => {
       param("id").isMongoId().withMessage("ID không hợp lệ"),
       validate,
     ],
-    entity.controller.delete,
+    deleteHandler(entity.model, entity.nameVi)
   );
 });
 

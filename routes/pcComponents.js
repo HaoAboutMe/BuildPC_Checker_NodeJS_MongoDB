@@ -1,10 +1,30 @@
 const express = require("express");
 const router = express.Router();
-const pcComponentController = require("../controllers/pcComponentController");
 const { isAdmin } = require("../utils/roleMiddleware");
 const authMiddleware = require("../utils/authMiddleware");
 const { body, param, validationResult } = require("express-validator");
 
+// Schemas
+const Cpu = require("../schemas/cpu");
+const Mainboard = require("../schemas/mainboard");
+const Ram = require("../schemas/ram");
+const Vga = require("../schemas/vga");
+const Ssd = require("../schemas/ssd");
+const Hdd = require("../schemas/hdd");
+const Psu = require("../schemas/psu");
+const PcCase = require("../schemas/pc-case");
+const Cooler = require("../schemas/cooler");
+
+// Define population paths for each component (previously in pcComponentController)
+Cpu.getPopulatePaths = () => ["socket", "pcieVersion"];
+Mainboard.getPopulatePaths = () => ["socket", "ramType", "size", "pcieVgaVersion"];
+Ram.getPopulatePaths = () => ["ramType"];
+Vga.getPopulatePaths = () => ["pcieVersion", "powerConnector"];
+Ssd.getPopulatePaths = () => ["ssdType", "formFactor", "interfaceType"];
+Hdd.getPopulatePaths = () => ["formFactor", "interfaceType"];
+Psu.getPopulatePaths = () => ["pcieConnectors"];
+PcCase.getPopulatePaths = () => ["size"];
+Cooler.getPopulatePaths = () => ["coolerType"];
 
 // Common middleware to handle validation results
 const validate = (req, res, next) => {
@@ -17,52 +37,83 @@ const validate = (req, res, next) => {
   next();
 };
 
+// Generic CRUD Handlers
+const getAllHandler = (Model) => async (req, res) => {
+  try {
+    const query = { isDeleted: false };
+    let items = Model.find(query);
+    if (Model.getPopulatePaths) items = items.populate(Model.getPopulatePaths());
+    const data = await items;
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const createHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    if (req.body.name) {
+      const existing = await Model.findOne({ name: req.body.name, isDeleted: false });
+      if (existing) return res.status(400).json({ success: false, message: `${modelNameVi} đã tồn tại` });
+    }
+    const newItem = new Model(req.body);
+    await newItem.save();
+    res.status(201).json({ success: true, data: newItem });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+const getByIdHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    let item = Model.findById(req.params.id);
+    if (Model.getPopulatePaths) item = item.populate(Model.getPopulatePaths());
+    const data = await item;
+    if (!data || data.isDeleted) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+    }
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+  }
+};
+
+const updateHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!item || item.isDeleted) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+    }
+    res.status(200).json({ success: true, data: item });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+const deleteHandler = (Model, modelNameVi) => async (req, res) => {
+  try {
+    const item = await Model.findById(req.params.id);
+    if (!item || item.isDeleted) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+    }
+    item.isDeleted = true;
+    await item.save();
+    res.status(200).json({ success: true, message: `Đã xóa ${modelNameVi.toLowerCase()} thành công` });
+  } catch (error) {
+    res.status(404).json({ success: false, message: `Không tìm thấy ${modelNameVi.toLowerCase()}` });
+  }
+};
+
 const components = [
-  {
-    path: "cpus",
-    controller: pcComponentController.cpuController,
-    refs: ["socket", "pcieVersion"],
-  },
-  {
-    path: "mainboards",
-    controller: pcComponentController.mainboardController,
-    refs: ["socket", "ramType", "size", "pcieVgaVersion"],
-  },
-  {
-    path: "rams",
-    controller: pcComponentController.ramController,
-    refs: ["ramType"],
-  },
-  {
-    path: "vgas",
-    controller: pcComponentController.vgaController,
-    refs: ["pcieVersion", "powerConnector"],
-  },
-  {
-    path: "ssds",
-    controller: pcComponentController.ssdController,
-    refs: ["ssdType", "formFactor", "interfaceType"],
-  },
-  {
-    path: "hdds",
-    controller: pcComponentController.hddController,
-    refs: ["formFactor", "interfaceType"],
-  },
-  {
-    path: "psus",
-    controller: pcComponentController.psuController,
-    refs: ["pcieConnectors"], // pcieConnectors is an array
-  },
-  {
-    path: "pc-cases",
-    controller: pcComponentController.pcCaseController,
-    refs: ["size"],
-  },
-  {
-    path: "coolers",
-    controller: pcComponentController.coolerController,
-    refs: ["coolerType"],
-  },
+  { path: "cpus", model: Cpu, name: "CPU", refs: ["socket", "pcieVersion"] },
+  { path: "mainboards", model: Mainboard, name: "Mainboard", refs: ["socket", "ramType", "size", "pcieVgaVersion"] },
+  { path: "rams", model: Ram, name: "RAM", refs: ["ramType"] },
+  { path: "vgas", model: Vga, name: "Card màn hình", refs: ["pcieVersion", "powerConnector"] },
+  { path: "ssds", model: Ssd, name: "Ổ cứng SSD", refs: ["ssdType", "formFactor", "interfaceType"] },
+  { path: "hdds", model: Hdd, name: "Ổ cứng HDD", refs: ["formFactor", "interfaceType"] },
+  { path: "psus", model: Psu, name: "Nguồn (PSU)", refs: ["pcieConnectors"] },
+  { path: "pc-cases", model: PcCase, name: "Vỏ Case", refs: ["size"] },
+  { path: "coolers", model: Cooler, name: "Tản nhiệt", refs: ["coolerType"] },
 ];
 
 /**
@@ -146,23 +197,6 @@ const components = [
  *     responses:
  *       200:
  *         description: Import hoàn tất (có thể có chunk thất bại)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: "Import hoàn tất tiến trình" }
- *                 totalRows: { type: number, example: 120 }
- *                 totalSuccessChunks: { type: number, example: 2 }
- *                 totalFailedChunks: { type: number, example: 1 }
- *                 failedChunks:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       rows: { type: string, example: "52-101" }
- *                       reason: { type: string, example: "E11000 duplicate key error" }
  *       400:
  *         description: Thiếu file, sai loại file, hoặc thiếu query param bắt buộc
  */
@@ -490,7 +524,6 @@ const components = [
  *             properties:
  *               name: { type: string, example: "Updated Product Name" }
  *               description: { type: string, example: "Updated description" }
- *               # Note: Specific fields depend on the component type
  *     responses:
  *       200:
  *         description: Updated successfully
@@ -515,11 +548,10 @@ const components = [
  *       200:
  *         description: Deleted successfully
  */
+
 components.forEach((comp) => {
-  // Tạo danh sách validate cho các trường tham chiếu
   const refValidators = (comp.refs || []).map((field) => {
     if (field === "pcieConnectors") {
-      // Trường hợp đặc biệt là mảng các ID (PSU)
       return body(field)
         .optional()
         .custom((value) => {
@@ -534,7 +566,7 @@ components.forEach((comp) => {
       .withMessage(`${field} của bạn không phải là ID hợp lệ`);
   });
 
-  router.get(`/${comp.path}`, comp.controller.getAll);
+  router.get(`/${comp.path}`, getAllHandler(comp.model));
   router.post(
     `/${comp.path}`,
     [
@@ -544,12 +576,12 @@ components.forEach((comp) => {
       ...refValidators,
       validate,
     ],
-    comp.controller.create,
+    createHandler(comp.model, comp.name)
   );
   router.get(
     `/${comp.path}/:id`,
     [param("id").isMongoId().withMessage("ID không hợp lệ"), validate],
-    comp.controller.getById,
+    getByIdHandler(comp.model, comp.name)
   );
   router.put(
     `/${comp.path}/:id`,
@@ -561,7 +593,7 @@ components.forEach((comp) => {
       ...refValidators,
       validate,
     ],
-    comp.controller.update,
+    updateHandler(comp.model, comp.name)
   );
   router.delete(
     `/${comp.path}/:id`,
@@ -571,7 +603,7 @@ components.forEach((comp) => {
       param("id").isMongoId().withMessage("ID không hợp lệ"),
       validate,
     ],
-    comp.controller.delete,
+    deleteHandler(comp.model, comp.name)
   );
 });
 

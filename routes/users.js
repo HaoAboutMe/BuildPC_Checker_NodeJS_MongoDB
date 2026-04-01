@@ -5,7 +5,6 @@ const { body, param, validationResult } = require("express-validator");
 const bcrypt = require("bcrypt");
 const authMiddleware = require("../utils/authMiddleware");
 const { isAdmin, isOwnerOrAdmin } = require("../utils/roleMiddleware");
-const UserController = require("../controllers/userController");
 
 // Common middleware to handle validation results
 const validate = (req, res, next) => {
@@ -39,7 +38,25 @@ const validate = (req, res, next) => {
  *       200:
  *         description: Success
  */
-router.get("/me", UserController.getProfile);
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    const user = await userModel.findById(req.user.id).populate({
+      path: "role",
+      select: "name",
+    });
+    
+    if (!user || user.isDeleted) {
+      return res.status(404).json({ success: false, message: "Người dùng không tồn tại" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 /**
  * @swagger
@@ -65,6 +82,7 @@ router.get("/me", UserController.getProfile);
 router.put(
   "/me",
   [
+    authMiddleware,
     body("username")
       .optional()
       .isLength({ min: 3 })
@@ -83,7 +101,56 @@ router.put(
       .withMessage("Ngày sinh không hợp lệ"),
     validate,
   ],
-  UserController.updateProfile,
+  async (req, res) => {
+    try {
+      const { firstname, lastname, dateOfBirth } = req.body;
+      const userId = req.user.id;
+
+      const allowedFields = ["firstname", "lastname", "dateOfBirth"];
+      const requestFields = Object.keys(req.body || {});
+      const hasDisallowedField = requestFields.some((field) => !allowedFields.includes(field));
+      if (hasDisallowedField) {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ được phép cập nhật firstname, lastname, dateOfBirth",
+        });
+      }
+
+      const updateData = {};
+      if (firstname !== undefined) updateData.firstname = firstname;
+      if (lastname !== undefined) updateData.lastname = lastname;
+      if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp ít nhất một trường để cập nhật",
+        });
+      }
+
+      const existingUser = await userModel.findById(userId);
+      if (!existingUser || existingUser.isDeleted) {
+        return res.status(404).json({ success: false, message: "Người dùng không tồn tại" });
+      }
+
+      const updatedUser = await userModel.findByIdAndUpdate(
+        userId,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate({
+        path: "role",
+        select: "name",
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Cập nhật thông tin thành công",
+        data: updatedUser
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  },
 );
 
 /**
@@ -110,6 +177,7 @@ router.put(
 router.put(
   "/me/change-password",
   [
+    authMiddleware,
     body("oldPassword")
       .notEmpty()
       .withMessage("Mật khẩu cũ không được để trống"),
@@ -126,7 +194,31 @@ router.put(
       ),
     validate,
   ],
-  UserController.changePassword,
+  async (req, res) => {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const userId = req.user.id;
+
+      const user = await userModel.findById(userId).select("+password");
+      const isMatch = await bcrypt.compare(oldPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: "Mật khẩu cũ không chính xác" });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      user.password = hashedPassword;
+      await user.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Đổi mật khẩu thành công"
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 );
 
 /* --- Admin/Management Routes --- */
@@ -143,7 +235,7 @@ router.put(
  *       200:
  *         description: Success
  */
-router.get("/", isAdmin, async function (req, res, next) {
+router.get("/", authMiddleware, isAdmin, async function (req, res, next) {
   try {
     let users = await userModel.find({ isDeleted: false }).populate({
       path: "role",
@@ -182,6 +274,7 @@ router.get("/", isAdmin, async function (req, res, next) {
 router.get(
   "/:id",
   [
+    authMiddleware,
     param("id").isMongoId().withMessage("ID không hợp lệ"),
     validate,
     isOwnerOrAdmin,
@@ -225,11 +318,27 @@ router.get(
 router.get(
   "/role/:roleId",
   [
+    authMiddleware,
     param("roleId").isMongoId().withMessage("Role ID không hợp lệ"),
     validate,
     isAdmin,
   ],
-  UserController.getUsersByRole,
+  async (req, res) => {
+    try {
+      const { roleId } = req.params;
+      const users = await userModel.find({ role: roleId, isDeleted: false }).populate({
+        path: "role",
+        select: "name",
+      });
+
+      res.status(200).json({
+        success: true,
+        data: users,
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 );
 
 /**
@@ -263,6 +372,7 @@ router.get(
 router.put(
   "/:id/role",
   [
+    authMiddleware,
     param("id").isMongoId().withMessage("ID người dùng không hợp lệ"),
     body("role")
       .notEmpty()
@@ -272,7 +382,33 @@ router.put(
     validate,
     isAdmin,
   ],
-  UserController.updateUserByAdmin,
+  async (req, res) => {
+    try {
+      const { role } = req.body;
+      const targetUserId = req.params.id;
+
+      const updatedUser = await userModel.findByIdAndUpdate(
+        targetUserId,
+        { role },
+        { new: true, runValidators: true }
+      ).populate({
+        path: "role",
+        select: "name",
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json({ success: false, message: "Người dùng không tồn tại" });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Cập nhật vai trò người dùng thành công",
+        data: updatedUser
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  },
 );
 
 /**
@@ -295,7 +431,7 @@ router.put(
  */
 router.delete(
   "/:id",
-  [param("id").isMongoId().withMessage("ID không hợp lệ"), validate, isAdmin],
+  [authMiddleware, param("id").isMongoId().withMessage("ID không hợp lệ"), validate, isAdmin],
   async function (req, res, next) {
     try {
       let user = await userModel.findById(req.params.id);

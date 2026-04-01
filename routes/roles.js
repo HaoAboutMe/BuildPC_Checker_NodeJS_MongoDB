@@ -1,6 +1,8 @@
 var express = require('express');
 var router = express.Router();
-const RoleController = require('../controllers/roleController');
+const roleModel = require("../schemas/role");
+const userModel = require("../schemas/user");
+const authMiddleware = require('../utils/authMiddleware');
 const { isAdmin } = require('../utils/roleMiddleware');
 const { body, param, validationResult } = require('express-validator');
 
@@ -34,7 +36,14 @@ const validate = (req, res, next) => {
  *       200:
  *         description: Success
  */
-router.get("/", isAdmin, RoleController.getAllRoles);
+router.get("/", [authMiddleware, isAdmin], async (req, res) => {
+    try {
+      const roles = await roleModel.find({ isDeleted: false });
+      res.status(200).json({ success: true, data: roles });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 /**
  * @swagger
@@ -60,11 +69,26 @@ router.get("/", isAdmin, RoleController.getAllRoles);
  *         description: Role created
  */
 router.post("/", [
+    authMiddleware,
     isAdmin,
     body('name').notEmpty().withMessage('Tên quyền không được để trống').trim().escape(),
     body('description').optional().trim().escape(),
     validate
-], RoleController.createRole);
+], async (req, res) => {
+    try {
+      const { name, description } = req.body;
+      const existingRole = await roleModel.findOne({ name });
+      if (existingRole) {
+        return res.status(400).json({ success: false, message: "Quyền này đã tồn tại" });
+      }
+
+      const newRole = new roleModel({ name, description });
+      await newRole.save();
+      res.status(201).json({ success: true, data: newRole });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+});
 
 /**
  * @swagger
@@ -85,10 +109,21 @@ router.post("/", [
  *         description: Success
  */
 router.get("/:id", [
+    authMiddleware,
     isAdmin,
     param('id').isMongoId().withMessage('ID không hợp lệ'),
     validate
-], RoleController.getRoleById);
+], async (req, res) => {
+    try {
+      const role = await roleModel.findById(req.params.id);
+      if (!role || role.isDeleted) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy quyền" });
+      }
+      res.status(200).json({ success: true, data: role });
+    } catch (error) {
+      res.status(404).json({ success: false, message: "Không tìm thấy quyền" });
+    }
+});
 
 /**
  * @swagger
@@ -109,10 +144,23 @@ router.get("/:id", [
  *         description: Role deleted
  */
 router.delete("/:id", [
+    authMiddleware,
     isAdmin,
     param('id').isMongoId().withMessage('ID không hợp lệ'),
     validate
-], RoleController.deleteRole);
+], async (req, res) => {
+    try {
+      const role = await roleModel.findById(req.params.id);
+      if (!role || role.isDeleted) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy quyền" });
+      }
+      role.isDeleted = true;
+      await role.save();
+      res.status(200).json({ success: true, message: "Đã xóa mềm quyền thành công", data: role });
+    } catch (error) {
+      res.status(404).json({ success: false, message: "Không tìm thấy quyền" });
+    }
+});
 
 /**
  * @swagger
@@ -133,9 +181,30 @@ router.delete("/:id", [
  *         description: Success
  */
 router.get("/:id/users", [
+    authMiddleware,
     isAdmin,
     param('id').isMongoId().withMessage('ID không hợp lệ'),
     validate
-], RoleController.getUsersByRole);
+], async (req, res) => {
+    try {
+      const roleId = req.params.id;
+      const role = await roleModel.findById(roleId);
+      if (!role || role.isDeleted) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy quyền" });
+      }
+
+      const users = await userModel.find({
+        role: roleId,
+        isDeleted: false
+      }).populate({
+        path: "role",
+        select: "name"
+      });
+
+      res.status(200).json({ success: true, data: users });
+    } catch (error) {
+      res.status(404).json({ success: false, message: "Không tìm thấy quyền hoặc ID không hợp lệ" });
+    }
+});
 
 module.exports = router;
