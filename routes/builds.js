@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const buildController = require('../controllers/buildController');
+const buildService = require('../services/buildService');
+const authMiddleware = require('../utils/authMiddleware');
 
 /**
  * @swagger
@@ -24,14 +25,12 @@ const buildController = require('../controllers/buildController');
  *             properties:
  *               cpuId:
  *                 type: string
- *                 example: "65cb7e2c..."
  *               mainboardId:
  *                 type: string
  *               ramId:
  *                 type: string
  *               ramQuantity:
  *                 type: integer
- *                 default: 1
  *               vgaId:
  *                 type: string
  *               ssdIds:
@@ -51,30 +50,17 @@ const buildController = require('../controllers/buildController');
  *     responses:
  *       200:
  *         description: Trả về kết quả kiểm tra
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     compatible:
- *                       type: boolean
- *                     errors:
- *                       type: array
- *                       items:
- *                         type: string
- *                     warnings:
- *                       type: array
- *                       items:
- *                         type: string
- *                     recommendedPsuWattage:
- *                       type: number
  */
-router.post('/check-compatibility', buildController.checkCompatibility);
+router.post('/check-compatibility', async (req, res) => {
+  try {
+    const build = req.body;
+    const result = await buildService.checkCompatibility(build);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error in checkCompatibility:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 /**
  * @swagger
@@ -98,43 +84,21 @@ router.post('/check-compatibility', buildController.checkCompatibility);
  *                 type: string
  *     responses:
  *       200:
- *         description: Trả về kết quả kiểm tra nghẽn cổ chai cho 3 độ phân giải
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     cpu:
- *                       type: object
- *                       properties:
- *                         name:
- *                           type: string
- *                         score:
- *                           type: number
- *                     gpu:
- *                       type: object
- *                       properties:
- *                         name:
- *                           type: string
- *                         score:
- *                           type: number
- *                     results:
- *                       type: object
- *                       properties:
- *                         1080p:
- *                           $ref: '#/components/schemas/BottleneckResult'
- *                         2k:
- *                           $ref: '#/components/schemas/BottleneckResult'
- *                         4k:
- *                           $ref: '#/components/schemas/BottleneckResult'
+ *         description: Trả về kết quả kiểm tra
  */
-router.post('/check-bottleneck', buildController.checkBottleneck);
-
+router.post('/check-bottleneck', async (req, res) => {
+  try {
+    const buildData = req.body;
+    const result = await buildService.checkBottleneck(buildData);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error in checkBottleneck:', error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Có lỗi xảy ra khi kiểm tra nghẽn cổ chai'
+    });
+  }
+});
 
 /**
  * @swagger
@@ -158,7 +122,6 @@ router.post('/check-bottleneck', buildController.checkBottleneck);
  *                 example: "Cấu hình Gaming 2024"
  *               description:
  *                 type: string
- *                 example: "Cấu hình tối ưu cho Cyberpunk 2077"
  *               cpuId:
  *                 type: string
  *               mainboardId:
@@ -186,13 +149,26 @@ router.post('/check-bottleneck', buildController.checkBottleneck);
  *     responses:
  *       201:
  *         description: Lưu thành công
- *       400:
- *         description: Lỗi tương thích hoặc thiếu dữ liệu
- *       401:
- *         description: Chưa đăng nhập
  */
-const authMiddleware = require('../utils/authMiddleware');
-router.post('/save-build', authMiddleware, buildController.saveBuild);
+router.post('/save-build', authMiddleware, async (req, res) => {
+  try {
+    const buildData = req.body;
+    const userId = req.user.id;
+    const savedBuild = await buildService.saveBuild(userId, buildData);
+    return res.status(201).json({
+      success: true,
+      message: "Lưu cấu hình thành công",
+      data: savedBuild
+    });
+  } catch (error) {
+    console.error('Error in saveBuild:', error);
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+      ...(error.errors && error.errors.length > 0 && { errors: error.errors })
+    });
+  }
+});
 
 /**
  * @swagger
@@ -206,7 +182,15 @@ router.post('/save-build', authMiddleware, buildController.saveBuild);
  *       200:
  *         description: Trả về danh sách cấu hình
  */
-router.get('/my-builds', authMiddleware, buildController.getAllMyBuilds);
+router.get('/my-builds', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const builds = await buildService.getUserBuilds(userId);
+    return res.status(200).json({ success: true, data: builds });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 /**
  * @swagger
@@ -226,7 +210,16 @@ router.get('/my-builds', authMiddleware, buildController.getAllMyBuilds);
  *       200:
  *         description: Trả về chi tiết cấu hình
  */
-router.get('/my-builds/:id', authMiddleware, buildController.getMyBuildById);
+router.get('/my-builds/:id', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const buildId = req.params.id;
+    const build = await buildService.getUserBuildById(userId, buildId);
+    return res.status(200).json({ success: true, data: build });
+  } catch (error) {
+    return res.status(404).json({ success: false, message: error.message });
+  }
+});
 
 /**
  * @swagger
@@ -252,7 +245,25 @@ router.get('/my-builds/:id', authMiddleware, buildController.getMyBuildById);
  *       200:
  *         description: Cập nhật thành công
  */
-router.put('/my-builds/:id', authMiddleware, buildController.updateMyBuild);
+router.put('/my-builds/:id', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const buildId = req.params.id;
+    const buildData = req.body;
+    const updatedBuild = await buildService.updateUserBuild(userId, buildId, buildData);
+    return res.status(200).json({
+      success: true,
+      data: updatedBuild,
+      message: "Cập nhật cấu hình thành công"
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+      ...(error.errors && error.errors.length > 0 && { errors: error.errors })
+    });
+  }
+});
 
 /**
  * @swagger
@@ -272,28 +283,15 @@ router.put('/my-builds/:id', authMiddleware, buildController.updateMyBuild);
  *       200:
  *         description: Xóa thành công
  */
-router.delete('/my-builds/:id', authMiddleware, buildController.deleteMyBuild);
+router.delete('/my-builds/:id', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const buildId = req.params.id;
+    await buildService.deleteUserBuild(userId, buildId);
+    return res.status(200).json({ success: true, message: "Xóa cấu hình thành công" });
+  } catch (error) {
+    return res.status(404).json({ success: false, message: error.message });
+  }
+});
 
 module.exports = router;
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     BottleneckResult:
- *       type: object
- *       properties:
- *         bottleneck:
- *           type: boolean
- *         type:
- *           type: string
- *           enum: [CPU, GPU, NONE, UNKNOWN]
- *         severity:
- *           type: string
- *           enum: [NONE, LOW, MEDIUM, HIGH]
- *         ratio:
- *           type: number
- *         message:
- *           type: string
- */
-
