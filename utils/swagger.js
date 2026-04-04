@@ -41,6 +41,7 @@ const options = {
       },
       { name: "PC Components", description: "PC hardware components" },
       { name: "Builds", description: "PC Build compatibility and optimization" },
+      { name: "Games", description: "Game compatibility and FPS estimation" },
     ],
   },
   apis: ["./routes/*.js"], // Path to the API docs
