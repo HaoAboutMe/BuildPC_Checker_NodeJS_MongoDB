@@ -29,7 +29,7 @@ app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({
       success: false,
-      message: "Dữ liệu JSON không hợp lệ (Malformed JSON)",
+      message: "D�?liệu JSON không hợp l�?(Malformed JSON)",
     });
   }
   next();
@@ -53,11 +53,19 @@ app.use("/api/v1/builds", require("./routes/builds"));
 app.use("/api/v1/files", require("./routes/files"));
 app.use("/api/v1/forum", require("./routes/forum"));
 app.use("/api/v1/chat", require("./routes/chat"));
+app.use("/api/v1/games", require("./routes/game"));
 
-mongoose.connect(process.env.MONGODB_URI);
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) {
+  console.error(
+    "Missing MONGODB_URI. Create a .env file (see .env.example) and restart the server.",
+  );
+} else {
+  mongoose.connect(mongoUri);
+}
 mongoose.connection.on("connected", function () {
   console.log("connected");
-  // Chạy seed dữ liệu khi kết nối thành công
+  // Chạy seed d�?liệu khi kết nối thành công
   const seedData = require("./utils/seed");
   seedData();
 });
