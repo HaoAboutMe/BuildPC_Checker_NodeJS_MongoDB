@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const { body, param, validationResult } = require("express-validator");
 const Cpu = require("../schemas/cpu");
 const Vga = require("../schemas/vga");
-const Game = require("../models/Game");
+const Game = require("../schemas/game");
 const authMiddleware = require("../utils/authMiddleware");
 const { isAdmin } = require("../utils/roleMiddleware");
 

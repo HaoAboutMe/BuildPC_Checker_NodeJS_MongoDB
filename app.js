@@ -29,7 +29,7 @@ app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({
       success: false,
-      message: "D�?liệu JSON không hợp l�?(Malformed JSON)",
+      message: "Dữ liệu JSON không hợp lệ (Malformed JSON)",
     });
   }
   next();
@@ -65,7 +65,7 @@ if (!mongoUri) {
 }
 mongoose.connection.on("connected", function () {
   console.log("connected");
-  // Chạy seed d�?liệu khi kết nối thành công
+  // Chạy seed dữ liệu khi kết nối thành công
   const seedData = require("./utils/seed");
   seedData();
 });
