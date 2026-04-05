@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const roleModel = require("../schemas/role");
 const userModel = require("../schemas/user");
-const Game = require("../models/Game");
+const Game = require("../schemas/game");
 
 const seedData = async () => {
   try {
